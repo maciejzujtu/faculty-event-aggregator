@@ -1,0 +1,51 @@
+name: feet-expert
+
+services:
+  database:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      # This database is reachable only inside the private Compose network.
+      POSTGRES_USER: ${DB_USER:-faculty_events}
+      POSTGRES_PASSWORD: ${DB_PASS:-faculty-events-local-only}
+      POSTGRES_DB: ${DB_NAME:-faculty_events}
+    volumes:
+      - feet_expert_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-faculty_events} -d ${DB_NAME:-faculty_events}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    environment:
+      DB_HOST: database
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-faculty_events}
+      DB_PASS: ${DB_PASS:-faculty-events-local-only}
+      DB_NAME: ${DB_NAME:-faculty_events}
+      CORS_ORIGINS: https://feet.expert
+      SAMPLE_DATA_PATH: ../docs/sampledata.json
+    depends_on:
+      database:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        VITE_API_URL: /api
+        VITE_ENABLE_EVENT_MANAGEMENT: "true"
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8090:80"
+    depends_on:
+      - backend
+
+volumes:
+  feet_expert_postgres_data:
